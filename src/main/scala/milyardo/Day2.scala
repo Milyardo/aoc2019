@@ -52,48 +52,61 @@ import cats.implicits._
  */
 object Day2 extends IOApp {
 
-  case class Addr(pos: Int) extends AnyVal
+  case class Pointer(addr: Int) extends AnyVal
 
   sealed trait OpCode
 
   object OpCode {
-
     final case object Exit extends OpCode
-
     final case object Halt extends OpCode
+    final case class Add(left: Pointer, right: Pointer, dest: Pointer) extends OpCode
+    final case class Mul(left: Pointer, right: Pointer, dest: Pointer) extends OpCode
 
-    final case class Add(left: Addr, right: Addr, dest: Addr) extends OpCode
-
-    final case class Mul(left: Addr, right: Addr, dest: Addr) extends OpCode
-
-    def nextOp(program: List[Int]): Option[(OpCode, List[Int])] = program match {
-      case 99 :: rest =>
-        Some((Exit, rest))
-      case 1 :: left :: right :: dest :: rest =>
-        Some((Add(Addr(left), Addr(right), Addr(dest)), rest))
-      case 2 :: left :: right :: dest :: rest =>
-        Some((Mul(Addr(left), Addr(right), Addr(dest)), rest))
+    def nextOp(program: List[Int]): OpCode = program match {
+      case 99 :: _ => Exit
+      case 1 :: left :: right :: dest :: _ =>
+        Add(Pointer(left), Pointer(right), Pointer(dest))
+      case 2 :: left :: right :: dest :: _ =>
+        Mul(Pointer(left), Pointer(right), Pointer(dest))
       case _ :: _ =>
-        Some((Halt, List.empty))
+        Halt
       case Nil =>
-        None
-    }
-
-    def parse(is: List[Int]): List[OpCode] = {
-      def loop(ops: List[OpCode], program: List[Int]): List[OpCode] =
-        nextOp(program) match {
-          case None => ops
-          case Some((op, rest)) => op :: loop(ops, rest)
-        }
-
-      loop(List.empty[OpCode], is)
+        Halt
     }
   }
 
   final case class Machine(pc: Int, mem: List[Int])
 
-  def step(machine: Machine): Machine = {
+  def step(machine: Machine): Either[Machine, Machine] = {
+    import OpCode._
+    def update(mem: List[Int], dest: Pointer, l: Pointer, r: Pointer, op: (Int, Int) => Int): Option[List[Int]] =
+      if(dest.addr < mem.length && l.addr < mem.length && r.addr < mem.length) {
+        Some(mem.updated(dest.addr, op(mem(l.addr),mem(r.addr))))
+      } else None
     val nextOp = OpCode.nextOp(machine.mem.drop(machine.pc))
+    nextOp match {
+      case Exit => Right(machine.copy(pc = Int.MaxValue))
+      case Halt => Left(machine)
+      case Add(l, r, dest) =>
+        update(machine.mem, dest, l, r, _ + _) match {
+          case None  => Left(machine)
+          case Some(newMem) => Right(machine.copy(pc = machine.pc + 4, mem = newMem))
+        }
+      case Mul(l, r, dest) =>
+        update(machine.mem, dest, l, r, _ * _) match {
+          case None  => Left(machine)
+          case Some(newMem) => Right(machine.copy(pc = machine.pc + 4, mem = newMem))
+        }
+    }
+  }
+
+  def run(init: Machine): Either[Machine, Machine] = {
+    def loop(state: Either[Machine, Machine]): Either[Machine, Machine] = state match {
+      case fail @ Left(_) => fail
+      case done @ Right(Machine(pc, mem)) if pc >= mem.length => done
+      case Right(continue) => loop(step(continue))
+    }
+    loop(Right(init))
   }
 
   def parse(program: String): List[Int] =
