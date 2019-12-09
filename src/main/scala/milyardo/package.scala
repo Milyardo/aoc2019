@@ -4,10 +4,14 @@ import cats.Show
 import cats.effect.{IO, Resource}
 
 package object milyardo {
-  def resource(name: String)(implicit cl: ClassLoader = getClass.getClassLoader): Resource[IO, InputStream] =
+  def resource(name: String)(
+      implicit cl: ClassLoader = getClass.getClassLoader
+  ): Resource[IO, InputStream] =
     Resource.make(IO(cl.getResourceAsStream(name)))(is => IO(is.close()))
-  def loadResource(name: String)(implicit cl: ClassLoader = getClass.getClassLoader): Resource[IO, String] =
-    resource(name).evalMap({is =>
+  def loadResource(
+      name: String
+  )(implicit cl: ClassLoader = getClass.getClassLoader): Resource[IO, String] =
+    resource(name).evalMap({ is =>
       IO(new String(is.readAllBytes()))
     })
 
